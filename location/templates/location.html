@@ -1,0 +1,178 @@
+<html>
+
+<head>
+    <title>Django Geolocation Query</title>
+    {% include '_css.html' %}
+</head>
+
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-6">
+                <h3>Django Geolocation Query!</h3>
+                <hr>
+                <div class="row">
+                    <div class="col-sm-12">
+                        <button id="get-position" class="btn btn-warning">GET</button> Latitude : <span id="latitude"></span>, Longitude : <span id="longitude"></span>
+                    </div>
+                </div>
+                <br>
+                <div class="row">
+                    <div class="col-sm-6">
+                        <button id="get-nearby-cities" class="btn btn-primary" style="width: 100%;">
+                            Get nearby cities within 100km
+                        </button>
+                        <br>
+                        <table class="table table-hover table-responsive" style="font-size: 12;">
+                            <thead>
+                                <td>City</td>
+                                <td>Latitude</td>
+                                <td>Longitude</td>
+                            </thead>
+                            <tbody id="nearby-cities"></tbody>
+                        </table>
+                    </div>
+                    <div class="col-sm-6">
+                        <button id="get-sorted-cities" class="btn btn-primary" style="width: 100%;">
+                            Top 10 nearest cities sorted by distance
+                        </button>
+                        <br>
+                        <table class="table table-hover table-responsive" style="font-size: 12;">
+                            <thead>
+                                <td>City</td>
+                                <td>Latitude</td>
+                                <td>Longitude</td>
+                                <td>Distance</td>
+                            </thead>
+                            <tbody id="sorted-cities"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6">
+                <div id='map' style='width: 100%; height: 100vh;'></div>
+            </div>
+        </div>
+    </div>
+    {% include '_js.html' %}
+    <script>
+        // Loading map
+        mapboxgl.accessToken = 'pk.eyJ1IjoiY29kZXJkaXB0byIsImEiOiJjazNjamJ0NDUwZGVtM2JudnRya3ZqeGQwIn0.2ey2JRMqoW_SN_1h5Wmcnw';
+        
+        let map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v11',
+            center: [90.412521, 23.810331],
+            zoom: 6,
+        });
+
+        // Sanitizing data
+        let locations = JSON.parse("{{ location_dict }}".replace(/&quot;/g, '"'));
+        
+        // Adding markers
+        locations.forEach(obj => {
+            let html = '<h3>' + obj.name + '</h3><p>Latitude: ' + obj.latitude + ', Longitude :' + obj.longitude + ' </p>';
+            new mapboxgl
+                .Marker({ color: 'red', draggable: false })
+                .setLngLat([obj.latitude, obj.longitude])
+                .setPopup(new mapboxgl.Popup({ offset: 25 })
+                    .setHTML(html))
+                .addTo(map);
+        });
+
+        // Handling getting location errors
+        const show_error = error => {
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    alert("Permission denied by user.");
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    alert("Location position unavailable.");
+                    break;
+                case error.TIMEOUT:
+                    alert("Request timeout. Try again.");
+                    break;
+                case error.UNKNOWN_ERROR:
+                    alert("Unknown error. Try again.");
+                    break;
+            }
+        }
+
+        // Getting latitude, longitude and showing them
+        const show_location = position => {
+            $("#latitude").html(position.coords.latitude);
+            $("#longitude").html(position.coords.longitude);
+        }
+
+        // Getting location from browser
+        const get_position = () => {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(show_location, show_error, { timeout: 9000, enableHighAccuracy: true });
+            } else {
+                console.log("Browser location not supported");
+            }
+        }
+
+        // Getting latitude longitude from DOM
+        const latlang = () => [$("#latitude").html(), $("#longitude").html()]
+
+        $(document).ready(function () {
+            get_position();
+            
+            $("#get-position").click(() => get_position());
+
+            // Get nearby cities from current location
+            $("#get-nearby-cities").click(() => {
+                let {latitude, longitude} = latlang();
+                
+                $.ajax({
+                    type: "GET",
+                    url: "/get-nearby-location/",
+                    dataType: "JSON",
+                    data: { latitude: latitude, longitude: longitude },
+                    success: data => {
+                        $("#nearby-cities").html('');
+                        let nearbyLocations = JSON.parse(data);
+                        nearbyLocations.forEach(row => {
+                            $("#nearby-cities").append(
+                                "<tr>" +
+                                "<td>" + row.name + "</td>" +
+                                "<td>" + row.latitude + "</td>" +
+                                "<td>" + row.longitude + "</td>" +
+                                "</tr>"
+                            )
+                        })
+                    }
+                })
+            });
+
+            // Get cities sorted by ascending distance
+            $("#get-sorted-cities").click(() => {
+                let {latitude, longitude} = latlang();
+
+                $.ajax({
+                    type: "GET",
+                    url: "/get-sorted-location/",
+                    dataType: "JSON",
+                    data: { latitude: latitude, longitude: longitude },
+                    success: data => {
+                        $("#sorted-cities").html('');
+                        let nearbyLocations = JSON.parse(data);
+                        nearbyLocations.forEach(row => {
+                            $("#sorted-cities").append(
+                                "<tr>" +
+                                "<td>" + row.name + "</td>" +
+                                "<td>" + row.latitude + "</td>" +
+                                "<td>" + row.longitude + "</td>" +
+                                "<td>" + row.distance + "</td>" +
+                                "</tr>"
+                            )
+                        })
+                    }
+                })
+            });
+        });
+    </script>
+</body>
+
+</html>
